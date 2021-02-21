@@ -1,5 +1,5 @@
 import streamlit as st
-import altair as alt
+import plotly.express as px
 
 import math
 import datetime
@@ -48,7 +48,7 @@ with col2:
     st.write("Votre montant d'IFI estime est de ",ifi(assets),' euros.')
 
 
-st.header('Real estate sales tax')
+st.header('Impot plus values immobilieres')
 
 col3,col4 = st.beta_columns(2)
 
@@ -69,17 +69,13 @@ def deduction(price):
             return (0.075*price)
         else:
             return ((0.075+0.15)*price)
+    elif nbyears>5:
+        return 0.15*price
     else:
         return 0
 
 deduct = deduction(pxacquisition)
 
-if deduct == 0:
-    st.write('Vous ne beneficiez pas de deductions.')
-elif nbyears<5:
-    st.write('Vous beneficiez de 7.5% de deduction pour frais de notaire soit ', '{:,.2f}'.format(deduct),' euros.')
-else:
-    st.write('Vous beneficiez de 7.5% de deduction pour frais de notaire et 15% pour travaux soit ', '{:,.2f}'.format(deduct),' euros au total.')
 
 ir=0.19
 charges = 0.172
@@ -88,33 +84,98 @@ def reducir(time):
     if time <6:
         return 0
     elif time<22:
-        return 0.06*(time-6)
+        return 0.06*(time-5)
     elif time==22:
-        return 0.06*16
+        return 0.06*16+0.04
     else:
         return 1
 
 def reduchar(time):
     if time <6:
         return 0
-    elif time<23:
+    elif time<22:
         return 0.0165*(time-5)
-    elif time==23:
-        return 0.0165*23+0.016
+    elif time==22:
+        return 0.0165*16+0.016
     elif time < 31:
-        return (1-(31-time)*0.09)
+        return (0.0165*16+0.016+0.09*(time-22))
     else:
         return 1
 
 plusvalue = (pxvente - (pxacquisition+deduction(pxacquisition)))
 
-st.write("Votre plus value nette s'eleve a ",'{:,.2f}'.format(plusvalue),' euros.')
 
-irtax = ir*reducir(math.floor(nbyears))
-chtax = charges*reduchar(math.floor(nbyears))
+irtax = ir*(1-reducir(math.floor(nbyears)))
+chtax = charges*(1-reduchar(math.floor(nbyears)))
 
 totaltax = irtax + chtax
 
-st.write("Votre impot s'eleve a ",'{:,.2f}'.format(totaltax*plusvalue),' euros.')
-st.write("L'impot sur le revenu correspond a ",'{:,.2f}'.format(irtax*plusvalue),' euros.')
-st.write("Les charges sociales correspondent a ",'{:,.2f}'.format(chtax*plusvalue),' euros.')
+# Plus value immobiliere elevee
+
+def pvelevee(pv):
+    if pv < 50000:
+        return 0
+    elif pv < 60000:
+        return 0.02*pv-(60000-pv)/20
+    elif pv < 100000:
+        return 0.02*pv
+    elif pv < 110000:
+        return 0.03*pv-(110000-pv)/10
+    elif pv < 150000:
+        return 0.03*pv
+    elif pv < 160000:
+        return 0.04*pv-(160000-pv)*15/100
+    elif pv < 200000:
+        return 0.04*pv
+    elif pv < 210000:
+        return 0.05*pv - (210000-pv)*20/100
+    elif pv < 250000:
+        return 0.05*pv
+    elif pv < 260000:
+        return 0.06*pv - (260000-pv)*25/100
+    else:
+        return 0.06*pv
+
+
+totaltax = totaltax*plusvalue+pvelevee(plusvalue)
+
+items = ['Prix achat','Prix vente','Duree detention','Succession','Plus value apres deductions','Deductions','Impot sur le revenu','Charges','Impot plus-values elevees','Total impots']
+values = [pxacquisition,pxvente,nbyears,success,plusvalue,deduction(pxacquisition),irtax*plusvalue,chtax*plusvalue,pvelevee(plusvalue),totaltax]
+
+df = pd.DataFrame([values],columns=items)
+
+for col in [0,1,2,4,5,6,7,8,9]:
+    df.iloc[:,col] = df.iloc[:,col].apply(lambda x: '{:,.2f}'.format(x))
+for col in [3]:
+    df.iloc[:,col] = df.iloc[:,col].apply(lambda x: 'Non' if x==0 else 'Oui')
+
+df = pd.DataFrame(df).transpose()
+df.columns=['Donnee']
+st.table(df)
+
+# gooddf = df.style.format({'Prix achat':'{:,.2f}','Prix vente':'{:,.2f}','Duree detention':'{:,.2f}','Plus value':'{:,.2f}','Dont deductions':'{:,.2f}','IR':'{:,.2%}','Charges':'{:,.2%}','Impot PV elevees':'{:,.2f}','Total impots':'{:,.2f}'})
+
+# st.table(gooddf)
+
+iryears = [ir*(1-reducir(year)) for year in range(31)]
+chyears = [charges*(1-reduchar(year)) for year in range(31)]
+
+mychart = pd.DataFrame([iryears,chyears]).transpose()
+mychart.columns=['IR','Charges']
+
+fig = px.area(mychart,title="Taux d'imposition")
+fig.update_xaxes(title_text='Annees')
+fig.update_yaxes(title_text="Taux d'imposition",tickformat='.2%')
+
+st.plotly_chart(fig,use_container_width=True)
+
+st.markdown('Note:')
+
+if deduct == 0:
+    st.write('Vous ne beneficiez pas de deductions.')
+elif nbyears<5 and success==False:
+    st.write('Vous beneficiez de 7.5% de deduction pour frais de notaire soit ', '{:,.2f}'.format(deduct),' euros.')
+elif nbyears>5 and success==True:
+    st.write('Vous beneficiez de 15% de deduction pour travaux soit ', '{:,.2f}'.format(deduct),' euros au total.')
+else:
+    st.write('Vous beneficiez de 7.5% de deduction pour frais de notaire et 15% pour travaux soit ', '{:,.2f}'.format(deduct),' euros au total.')
