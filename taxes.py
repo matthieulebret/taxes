@@ -39,13 +39,10 @@ def ifi(assets):
         tax = 98190+(assets-10000000)*0.015
     return '{:,.2f}'.format(tax)
 
-col1,col2 = st.beta_columns(2)
+assets = st.number_input("Entrez votre patrimoine taxable a l'IFI en millions d'euros",value=2.00,step=0.20,format='%.2f')*1000000
 
-with col1:
-    assets = st.number_input("Entrez votre patrimoine taxable a l'IFI en millions d'euros",value=2.00,step=0.20,format='%.2f')*1000000
-with col2:
-    st.write('')
-    st.write("Votre montant d'IFI estime est de ",ifi(assets),' euros.')
+message = "Votre montant d'IFI estime est de "+ifi(assets)+' euros.'
+st.subheader(message)
 
 
 st.header('Impot plus values immobilieres')
